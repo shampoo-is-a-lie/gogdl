@@ -177,7 +177,7 @@ class Manager:
             "languages": [lang.code for lang in self.languages_codes],
             "folder_name": self.folder_name,
             "dependencies": [],
-            "versionName": self.game_installer["version"],
+            "versionName": self.game_installer["version"] if self.game_installer else None,
         }
 
         return response

@@ -388,6 +388,8 @@ class Writer(Process):
                 except OSError as e:
                     self.results_queue.put(WriterTaskResult(False, task))
                     continue
+                self.results_queue.put(WriterTaskResult(True, task))
+                continue
 
             elif task.flags & TaskFlag.MAKE_EXE:
                 if file_handle and task.file_path == current_file:

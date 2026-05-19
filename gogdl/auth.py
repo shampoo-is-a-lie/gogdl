@@ -96,6 +96,9 @@ class AuthorizationManager:
             client_secret = CLIENT_SECRET
 
         credentials = self.credentials_data.get(CLIENT_ID)
+        if not credentials:
+            self.logger.error("No credentials to refresh")
+            return False
         refresh_token = credentials["refresh_token"]
 
         url = f"https://auth.gog.com/token?client_id={client_id}&client_secret={client_secret}&grant_type=refresh_token&refresh_token={refresh_token}"
