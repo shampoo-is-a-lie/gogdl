@@ -1,81 +1,28 @@
-# heroic-gogdl
+# gogdl — GRINDER fork
 
-GOG download module for [Heroic Games Launcher](https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher)
+A fork of [heroic-gogdl](https://github.com/Heroic-Games-Launcher/heroic-gogdl) maintained for **[GRINDER](https://github.com/shampoo-is-a-lie/GRINDER)** — the Cafe Neurotico GOG/Epic launcher.
 
-## Important note
+## Changes from upstream
 
-This is **not** user friendly cli, it's meant to be used by some other application wanting to download game files, manage cloud saves or conveniently launch the game
+| File | Change |
+|---|---|
+| `gogdl/constants.py` | Default config dir renamed `heroic_gogdl` → `gogdl`; `GOGDL_CONFIG_PATH` isolates manifests per launcher |
+| `gogdl/dl/managers/linux.py` | Null check before subscripting `game_installer` — fixes crash when no Linux installer matches |
+| `gogdl/dl/progressbar.py` | Progress line rewritten to `Progress: X.XX% (...) Speed: X.XX MiB/s ETA: HH:MM:SS` |
+| `gogdl/dl/workers/task_executor.py` | `gogdl_xdelta3` import made optional so the binary builds without the C extension |
+| `gogdl/auth.py` | User-Agent changed to `GRINDER by Cafe Neurotico` |
+| `grinder_entry.py` | PyInstaller entry point with `freeze_support()` + `set_start_method('spawn')` |
 
-## Contributing
-
-The only python dependency needed at this moment is `requests`
-
-You can install it using your Linux distribution package manager or using pip
-
-```
-pip install requests
-```
-
-To run a code locally, use `bin/gogdl` script, which is a convenient python wrapper
-
-gogdl now manages authentication, so it no longer needs --token parameter, although you now need to provide a path to json file where the tokens will be stored
-Heroic uses `$XDG_CONFIG_HOME/heroic/gog_store/auth.json`
-
-Here is the command to pull the source code
+## Building
 
 ```bash
-git clone https://github.com/Heroic-Games-Launcher/heroic-gogdl
-cd heroic-gogdl
-python -m venv venv
-. venv/bin/activate
-pip install .
-gogdl --help
+pip install pyinstaller requests
+pyinstaller --onefile --name gogdl grinder_entry.py
+# Output: dist/gogdl
 ```
 
-If you have any questions ask on our [Discord](https://discord.com/invite/rHJ2uqdquK) or through GitHub issue
+## License
 
-## Building PyInstaller executable
+GPL v3 — same as upstream. See [LICENSE](LICENSE).
 
-If you wish to test the gogdl in Heroic flatpak you likely need to build `gogdl` executable using pyinstaller
-
-- Get pyinstaller
-
-```bash
-pip install pyinstaller
-```
-
-- Build the binary (assuming you are in heroic-gogdl direcory)
-
-```bash
-pip install -e . # Ensure you build the C code to python module in current directory
-pyinstaller --onefile --name gogdl gogdl/cli.py
-```
-
-## Building zipapp executable
-
-For Linux it is especially recommended to use zipapp format, as it allows gogdl by relying on OS provided python interpretter
-
-- Install gogdl and its dependencies into build directory
-
-```bash
-pip install . --target build 
-```
-
-- Copy custom entry point - it's required to unpack the C lib to a known location
-
-Right now the entry point is hardcoded for Linux support only
-```bash
-cp zipapp_main.py build/__main__.py
-``` 
-
-- Package
-
-```bash
-python -m zipapp --output dist/gogdl --python "/usr/bin/env python3" --compress build
-```
-
-## Great resources about GOG API
-
-- https://github.com/Lariaa/GameLauncherResearch/wiki/
-- https://github.com/Sude-/lgogdownloader
-- https://gogapidocs.readthedocs.io/en/latest/
+Original work copyright © imLinguin and the Heroic Games Launcher contributors.
