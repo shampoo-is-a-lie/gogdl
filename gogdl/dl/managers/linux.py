@@ -98,6 +98,11 @@ class Manager:
         self.game_installer = self.find_matching_installer(game_installers)
 
         if not self.dlc_only:
+            if self.game_installer is None:
+                raise Exception(
+                    f"No Linux installer found for game {self.game_id}. "
+                    "The game may only be available as a Windows build on GOG."
+                )
             installer_data = dl_utils.get_json(self.api_handler, self.game_installer["files"][0]["downlink"])
             game_install_handler = linux.InstallerHandler(installer_data["downlink"],self.game_id,self.api_handler.session)
             self.installer_handlers.append(game_install_handler)

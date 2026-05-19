@@ -14,18 +14,19 @@ NON_NATIVE_SEP = "\\" if os.sep == "/" else "/"
 
 if platform == 'linux':
     CONFIG_DIR = os.path.join(
-        os.getenv("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), 'heroic_gogdl'
+        os.getenv("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), 'gogdl'
     )
 elif platform == 'win32':
     CONFIG_DIR = os.path.join(
-        os.getenv("APPDATA"), 'heroic_gogdl'
+        os.getenv("APPDATA"), 'gogdl'
     )
 elif platform == 'darwin':
     CONFIG_DIR = os.path.join(
-        os.path.expanduser("~/Library"), "Application Support", "heroic_gogdl"
+        os.path.expanduser("~/Library"), "Application Support", "gogdl"
     )
 
+# GOGDL_CONFIG_PATH lets the calling launcher redirect manifests to its own dir
 if os.getenv("GOGDL_CONFIG_PATH"):
-    CONFIG_DIR = os.path.join(os.getenv("GOGDL_CONFIG_PATH"), "heroic_gogdl")
+    CONFIG_DIR = os.path.join(os.getenv("GOGDL_CONFIG_PATH"), "gogdl")
 
 MANIFESTS_DIR = os.path.join(CONFIG_DIR, "manifests")

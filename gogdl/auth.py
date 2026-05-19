@@ -22,7 +22,7 @@ class AuthorizationManager:
         self.__read_config()
 
         self.session.headers.update(
-            {"User-Agent": f"gogdl/{version} (Heroic Games Launcher)"}
+            {"User-Agent": f"gogdl/{version} (GRINDER by Cafe Neurotico)"}
         )
         self.session.auth = lambda r: r
 

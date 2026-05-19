@@ -79,25 +79,16 @@ class ProgressBar(threading.Thread):
         estimated_m = int(estimated_time // 60)
         estimated_s = int(estimated_time % 60)
 
-        self.logger.info(
-            f"= Progress: {percentage:.02f} {self.written_total}/{self.total}, "
-            + f"Running for: {runtime_h:02d}:{runtime_m:02d}:{runtime_s:02d}, "
-            + f"ETA: {estimated_h:02d}:{estimated_m:02d}:{estimated_s:02d}"
-        )
+        dl_speed_mib  = current_dl_speed / 1024 / 1024
+        write_mib     = self.written_total / 1024 / 1024
+        total_mib     = self.total / 1024 / 1024
 
+        # GRINDER-parseable progress line
         self.logger.info(
-            f"= Downloaded: {self.downloaded / 1024 / 1024:.02f} MiB, "
-            f"Written: {self.written_total / 1024 / 1024:.02f} MiB"
-        )
-
-        self.logger.info(
-            f" + Download\t- {current_dl_speed / 1024 / 1024:.02f} MiB/s (raw) "
-            f"/ {current_decompress / 1024 / 1024:.02f} MiB/s (decompressed)"
-        )
-
-        self.logger.info(
-            f" + Disk\t- {current_w_speed / 1024 / 1024:.02f} MiB/s (write) / "
-            f"{current_r_speed / 1024 / 1024:.02f} MiB/s (read)"
+            f"Progress: {percentage:.02f}% "
+            f"({write_mib:.02f}/{total_mib:.02f} MiB) "
+            f"Speed: {dl_speed_mib:.02f} MiB/s "
+            f"ETA: {estimated_h:02d}:{estimated_m:02d}:{estimated_s:02d}"
         )
 
         self.last_update = time()

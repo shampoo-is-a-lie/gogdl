@@ -17,7 +17,12 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from multiprocessing import Process, Queue
 from gogdl.dl.objects.generic import MemorySegment, TaskFlag, TerminateWorker
-import gogdl_xdelta3
+try:
+    import gogdl_xdelta3
+    _XDELTA3_AVAILABLE = True
+except ImportError:
+    gogdl_xdelta3 = None
+    _XDELTA3_AVAILABLE = False
 
 
 class FailReason(Enum):
@@ -357,6 +362,8 @@ class Writer(Process):
                     patch = os.path.join(task.destination, task.patch_file)
                     patch = dl_utils.get_case_insensitive_name(patch)
                     target = task_path
+                    if not _XDELTA3_AVAILABLE:
+                        raise Exception("xdelta3 not available — patch-based update not supported")
                     gogdl_xdelta3.patch(source, patch, target, self.speed_queue)
 
                 except Exception as e:
