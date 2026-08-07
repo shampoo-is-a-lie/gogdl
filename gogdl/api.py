@@ -10,11 +10,29 @@ from gogdl import version
 
 
 
+DEFAULT_TIMEOUT = 30
+
+
+class _TimeoutSession(requests.Session):
+    """A Session that applies a default timeout to every request.
+
+    requests defaults to no timeout at all, so a single unresponsive endpoint blocks
+    the caller indefinitely. Callers that pass their own timeout keep it.
+    """
+
+    def request(self, *args, **kwargs):
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
+        return super().request(*args, **kwargs)
+
+
 class ApiHandler:
     def __init__(self, auth_manager):
         self.auth_manager = auth_manager
         self.logger = logging.getLogger("API")
-        self.session = requests.Session()
+        # Every call on this session goes through a timeout. Without one, a connection
+        # the server half-closes leaves the read blocking forever, which is how a
+        # download turns into a process that is alive, idle and never finishing.
+        self.session = _TimeoutSession()
         adapter = requests.adapters.HTTPAdapter(pool_maxsize=cpu_count())
         self.session.mount("https://", adapter)
         self.session.headers = {

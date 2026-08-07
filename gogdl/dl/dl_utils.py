@@ -51,7 +51,24 @@ def galaxy_path(manifest: str):
     return galaxy_path
 
 
+SECURE_LINK_ATTEMPTS = 8
+
+
 def get_secure_link(api_handler, path, gameId, generation=2, logger=None, root=None):
+    """Fetch the CDN links for a depot path.
+
+    This used to retry by calling itself — with no attempt limit, no backoff, and the
+    `root` argument dropped on every recursive call. Any failure that did not clear on
+    its own therefore became a permanent, silent hang: the process sat in a 0.2s loop
+    re-asking forever, the download never started, no error was ever reported, and from
+    the outside it looked exactly like a download frozen at a percentage. That is the
+    stall seen on an 18 GB game, caught with a stack 27 frames deep in this function.
+
+    An expired access token is the most likely trigger and used to be unrecoverable
+    here: GOG tokens last an hour, a large download does not, and a 401 was retried
+    verbatim forever rather than refreshing. Now the token is refreshed once on a 401,
+    the retries are bounded and backed off, and running out raises instead of hanging.
+    """
     url = ""
     if generation == 2:
         url = f"{constants.GOG_CONTENT_SYSTEM}/products/{gameId}/secure_link?_version=2&generation=2&path={path}"
@@ -60,23 +77,48 @@ def get_secure_link(api_handler, path, gameId, generation=2, logger=None, root=N
     if root:
         url += f"&root={root}"
 
-    try:
-        r = requests.get(url, headers=api_handler.session.headers, timeout=TIMEOUT)
-    except BaseException as exception:
+    refreshed = False
+    last_error = "unknown error"
+
+    for attempt in range(SECURE_LINK_ATTEMPTS):
+        if attempt:
+            # 0.5s, 1s, 2s, 4s … capped. A tight loop against an endpoint that is
+            # rate-limiting is the surest way to stay rate-limited.
+            time.sleep(min(0.5 * (2 ** (attempt - 1)), 15))
+
+        try:
+            r = requests.get(url, headers=api_handler.session.headers, timeout=TIMEOUT)
+        except BaseException as exception:
+            last_error = f"{type(exception).__name__}: {exception}"
+            if logger:
+                logger.warning(f"secure link attempt {attempt + 1}/{SECURE_LINK_ATTEMPTS} failed: {last_error}")
+            continue
+
+        if r.status_code == 200:
+            return r.json()['urls']
+
+        last_error = f"HTTP {r.status_code}"
+
+        # A large download outlives its access token. Refresh once, then carry on with
+        # the remaining attempts rather than spinning on a 401 that can never succeed.
+        if r.status_code in (401, 403) and not refreshed:
+            refreshed = True
+            try:
+                if api_handler.auth_manager.refresh_credentials():
+                    credentials = api_handler.auth_manager.get_credentials()
+                    api_handler.session.headers["Authorization"] = f"Bearer {credentials['access_token']}"
+                    if logger:
+                        logger.info("access token expired mid-download — refreshed")
+                    continue
+            except BaseException as exception:
+                last_error = f"token refresh failed: {exception}"
+
         if logger:
-            logger.info(exception)
-        time.sleep(0.2)
-        return get_secure_link(api_handler, path, gameId, generation, logger)
+            logger.warning(f"secure link attempt {attempt + 1}/{SECURE_LINK_ATTEMPTS}: {last_error}")
 
-    if r.status_code != 200:
-        if logger:
-            logger.info("invalid secure link response")
-        time.sleep(0.2)
-        return get_secure_link(api_handler, path, gameId, generation, logger)
-
-    js = r.json()
-
-    return js['urls']
+    raise RuntimeError(
+        f"Could not get download links for {gameId} after {SECURE_LINK_ATTEMPTS} attempts ({last_error})."
+    )
 
 def get_dependency_link(api_handler):
     data = get_json(
