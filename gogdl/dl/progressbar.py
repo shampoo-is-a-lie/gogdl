@@ -28,25 +28,45 @@ class ProgressBar(threading.Thread):
         super().__init__(target=self.loop)
 
     def loop(self):
+        # These queues MUST be drained faster than the workers fill them, or the download
+        # deadlocks. A worker pushes one sample per 512 KiB chunk — tens per second on a
+        # decent connection — and every put() is blocking. The old loop here spent up to a
+        # second inside each get(timeout=1) and ran for only ~1 second of wall time, so it
+        # consumed roughly ONE item per queue per second no matter how fast data arrived.
+        #
+        # The backlog therefore only ever grew. Once the queue's pipe buffer filled, the
+        # QueueFeederThread blocked, put() blocked with it, and every download worker froze
+        # mid-chunk while the progress line kept reporting the last figure it had computed.
+        # Small games finished before the buffer filled; an 18 GB one (~36,000 chunks) never
+        # stood a chance, and always died at about the same point.
+        #
+        # Drain everything available, then sleep — never block on a get().
         while not self.completed:
             self.print_progressbar()
             self.downloaded_since_last_update = self.decompressed_since_last_update = 0
             self.written_since_last_update = self.read_since_last_update = 0
             timestamp = time()
             while not self.completed and (time() - timestamp) < 1:
-                try:
-                    dl, dec = self.speed_queue.get(timeout=1)
-                    self.downloaded_since_last_update += dl
-                    self.decompressed_since_last_update += dec
-                except queue.Empty:
-                    pass
-                try:
-                    wr, r = self.write_queue.get(timeout=1)
-                    self.written_since_last_update += wr
-                    self.read_since_last_update += r
-                except queue.Empty:
-                    pass
-                
+                drained = False
+                while True:
+                    try:
+                        dl, dec = self.speed_queue.get_nowait()
+                        self.downloaded_since_last_update += dl
+                        self.decompressed_since_last_update += dec
+                        drained = True
+                    except queue.Empty:
+                        break
+                while True:
+                    try:
+                        wr, r = self.write_queue.get_nowait()
+                        self.written_since_last_update += wr
+                        self.read_since_last_update += r
+                        drained = True
+                    except queue.Empty:
+                        break
+                if not drained:
+                    sleep(0.05)   # nothing waiting; yield instead of spinning
+
         self.print_progressbar()
     def print_progressbar(self):
         percentage = (self.written_total / self.total) * 100

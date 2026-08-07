@@ -1,6 +1,6 @@
 from multiprocessing.shared_memory import SharedMemory
 import os
-from queue import Empty
+from queue import Empty, Full
 import shutil
 import sys
 import stat
@@ -86,6 +86,20 @@ class WriterTaskResult:
     written: int = 0
 
 
+def _report(q, sample):
+    """Push a progress sample, but never wait for room.
+
+    Speed figures are cosmetic; a download is not. These queues block by default, so a
+    consumer that falls behind used to stop the transfer outright (see the note in
+    dl/progressbar.py). Dropping a sample costs a slightly jumpy speed readout for one
+    tick and nothing else.
+    """
+    try:
+        q.put_nowait(sample)
+    except (Full, ValueError, OSError):
+        pass
+
+
 class Download(Process):
     def __init__(self, shared_memory, download_queue, results_queue, speed_queue, shared_secure_links):
         self.shared_memory = SharedMemory(name=shared_memory)
@@ -148,7 +162,7 @@ class Download(Process):
                     compressed_sum.update(chunk)
                     decompressed = decompressor.decompress(chunk)
                     buffer += decompressed
-                    self.speed_queue.put((len(chunk), len(decompressed)))
+                    _report(self.speed_queue, (len(chunk), len(decompressed)))
 
             except Exception as e:
                 print("Connection failed", e)
@@ -203,7 +217,7 @@ class Download(Process):
                 response.raise_for_status()
                 for chunk in response.iter_content(1024 * 512):
                     buffer += chunk 
-                    self.speed_queue.put((len(chunk), len(chunk)))
+                    _report(self.speed_queue, (len(chunk), len(chunk)))
             except Exception as e:
                 print("Connection failed", e)
                 #Handle exception
@@ -419,7 +433,7 @@ class Writer(Process):
                     while left > 0:
                         chunk = buffer.read(min(1024 * 1024, left))   
                         written += file_handle.write(chunk)
-                        self.speed_queue.put((len(chunk), 0))
+                        _report(self.speed_queue, (len(chunk), 0))
                         left -= len(chunk)
                         
                     if task.flags & TaskFlag.OFFLOAD_TO_CACHE and task.hash:
@@ -427,7 +441,7 @@ class Writer(Process):
                         dl_utils.prepare_location(self.cache)
                         cache_file = open(cache_file_path, 'wb')
                         cache_file.write(self.shared_memory.buf[offset:end].tobytes())
-                        self.speed_queue.put((task.size, 0))
+                        _report(self.speed_queue, (task.size, 0))
                         cache_file.close()
                 elif task.old_file:
                     if not task.size:
@@ -451,7 +465,7 @@ class Writer(Process):
                         else:
                             data = chunk
                         written += file_handle.write(data)
-                        self.speed_queue.put((len(data), len(chunk)))
+                        _report(self.speed_queue, (len(data), len(chunk)))
                         left -= len(chunk)
                     old_file_handle.close()
                     if task.flags & TaskFlag.ZIP_DEC:
