@@ -135,15 +135,28 @@ class Download(Process):
 
         compressed_md5 = task.compressed_sum
 
-        endpoint = copy(urls[0])
-        if task.product_id != 'redist':
-            endpoint["parameters"]["path"] += f"/{dl_utils.galaxy_path(compressed_md5)}"
-            url = dl_utils.merge_url_with_params(
-                endpoint["url_format"], endpoint["parameters"]
-            )
-        else:
+        # GOG serves a game from more than one CDN, and they do not always agree. A chunk
+        # can be intact on one and corrupt on another: Colony Ship's pakchunk3 chunk 201
+        # was served truncated by gcore every single time (about 10 MB of 19.5 MB, then the
+        # connection closed) while fastly returned all 19,525,037 bytes with a matching md5.
+        #
+        # This used to pin urls[0] for the life of the task, so a bad object on the first
+        # CDN was retried against that same CDN for ever — the download re-fetched the same
+        # broken fragment indefinitely, nothing was written, and no error was ever raised.
+        # Every attempt now moves to the next endpoint, so one bad mirror costs a retry
+        # rather than the whole download.
+        def endpoint_url(index):
+            endpoint = copy(urls[index % len(urls)])
+            if task.product_id != 'redist':
+                endpoint["parameters"]["path"] += f"/{dl_utils.galaxy_path(compressed_md5)}"
+                return dl_utils.merge_url_with_params(
+                    endpoint["url_format"], endpoint["parameters"]
+                )
             endpoint["url"] += "/" + dl_utils.galaxy_path(compressed_md5)
-            url = endpoint["url"]
+            return endpoint["url"]
+
+        attempt = 0
+        url = endpoint_url(attempt)
 
         buffer = bytes()
         compressed_sum = hashlib.md5()
@@ -164,13 +177,26 @@ class Download(Process):
                     buffer += decompressed
                     _report(self.speed_queue, (len(chunk), len(decompressed)))
 
+                # Verify here, inside the loop, so a bad copy is retried against the NEXT
+                # CDN. Checking after the loop instead meant a mismatch ended the task, the
+                # manager resubmitted it, and the fresh task started again at endpoint 0 —
+                # so a chunk that is corrupt on the first CDN could never reach the second,
+                # however many times it was retried.
+                if compressed_sum.hexdigest() != compressed_md5:
+                    raise ValueError(
+                        f"checksum mismatch from {url.split('/')[2]} "
+                        f"({download_size} bytes) — trying another CDN"
+                    )
+
             except Exception as e:
                 print("Connection failed", e)
-                if response and response.status_code == 401:
+                if response is not None and getattr(response, 'status_code', None) == 401:
                     self.results_queue.put(DownloadTaskResult(False, FailReason.UNAUTHORIZED, task))
                     print("Connection failed, unauthorized")
                     return
                 retries -= 1
+                attempt += 1
+                url = endpoint_url(attempt)      # next CDN — see endpoint_url
                 time.sleep(2)
                 continue
             break
