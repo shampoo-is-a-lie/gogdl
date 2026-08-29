@@ -1,6 +1,6 @@
 # gogdl — GRINDER fork
 
-A fork of [heroic-gogdl](https://github.com/Heroic-Games-Launcher/heroic-gogdl) maintained for **[GRINDER](https://github.com/shampoo-is-a-lie/GRINDER)** — the Cafe Neurotico GOG/Epic launcher.
+A fork of [heroic-gogdl](https://github.com/Heroic-Games-Launcher/heroic-gogdl) maintained for **[GRINDER](https://github.com/FromChaosComesClarity/GRINDER)** — the Cafe Neurotico GOG/Epic launcher.
 
 ## Changes from upstream
 
